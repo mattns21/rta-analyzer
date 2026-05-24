@@ -64,10 +64,6 @@
         <option value="8192">8192</option>
       </select>
     </div>
-    <div class="ctrl-group">
-      <input type="checkbox" id="peak-hold" checked>
-      <label for="peak-hold">ピークホールド</label>
-    </div>
   </div>
 
   <!-- SPL縦メーター ＋ スペクトラム 横並び -->
@@ -108,7 +104,6 @@ const DB_INTERNAL_MIN=-100,DB_INTERNAL_MAX=20;
 
 let audioCtx=null,analyser=null,stream=null,gainNode=null;
 let running=false,raf=null;
-let peakDB=-Infinity,peakTime=0;
 let gainDB=0;
 
 const canvas=document.getElementById('fft-canvas');
@@ -129,7 +124,7 @@ function resizeCanvas(){
 // SPLメーターの高さをウィンドウに応じて設定
 function setSplHeight(){
   const vh=window.innerHeight;
-  const targetH=Math.max(200,Math.floor(vh*0.5));
+  const targetH=Math.max(260,Math.floor(vh*0.75));
   document.getElementById('spl-track-v').style.minHeight=targetH+'px';
   resizeCanvas();
 }
@@ -174,7 +169,6 @@ function stopMic(){
   stream&&stream.getTracks().forEach(t=>t.stop());
   audioCtx&&audioCtx.close();
   audioCtx=null;analyser=null;gainNode=null;
-  peakDB=-Infinity;
   document.getElementById('start-btn').textContent='マイク開始';
   document.getElementById('start-btn').classList.remove('active');
   document.getElementById('status').textContent='停止しました';
@@ -213,13 +207,6 @@ function loop(){
   const fill=document.getElementById('spl-fill-v');
   fill.style.height=pct.toFixed(1)+'%';
   fill.style.background=pct>85?'var(--red)':pct>65?'var(--amber)':'var(--green)';
-
-  // ピークホールド（縦メーター用）
-  const now=Date.now();
-  if(document.getElementById('peak-hold').checked){
-    if(rmsDb>peakDB){peakDB=rmsDb;peakTime=now;}
-    else if(now-peakTime>2000)peakDB=rmsDb;
-  }else{peakDB=rmsDb;}
 
   drawSpectrum(data,bufLen,binHz);
 }
