@@ -21,20 +21,18 @@
   .card{background:var(--bg2);border-radius:12px;padding:12px}
   .label{font-size:11px;color:var(--text3);margin-bottom:6px;letter-spacing:0.06em;text-transform:uppercase}
 
-  /* メーターグリッド */
-  #meters{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-  .metric{background:var(--bg3);border-radius:10px;padding:10px}
-  .metric .lbl{font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:0.05em}
-  .metric .val{font-size:20px;font-weight:500;line-height:1;color:var(--text)}
-  .metric .unit{font-size:10px;color:var(--text3);margin-left:1px}
-
-  /* SPLバー */
-  #spl-track{width:100%;height:18px;background:var(--bg3);border-radius:9px;overflow:hidden;position:relative}
-  #spl-fill{height:100%;width:0%;background:var(--green);border-radius:9px;transition:width 0.12s,background 0.12s}
-  #spl-peak-marker{position:absolute;top:2px;bottom:2px;width:3px;border-radius:2px;background:var(--red);transition:left 0.1s}
+  /* SPLメーター（縦長） */
+  #spl-section{display:flex;gap:10px;align-items:stretch}
+  #spl-meter-wrap{display:flex;flex-direction:column;align-items:center;gap:4px;min-width:56px}
+  #spl-meter-label{font-size:10px;color:var(--text3);letter-spacing:0.05em}
+  #spl-track-v{flex:1;width:28px;background:var(--bg3);border-radius:14px;overflow:hidden;position:relative;min-height:160px}
+  #spl-fill-v{position:absolute;bottom:0;left:0;right:0;height:0%;background:var(--green);border-radius:14px;transition:height 0.12s,background 0.12s}
+  #spl-val-wrap{font-size:24px;font-weight:500;color:var(--text);text-align:center;line-height:1}
+  #spl-val-unit{font-size:11px;color:var(--text3);text-align:center}
 
   /* スペクトラム */
-  canvas{width:100%;display:block;border-radius:8px;background:var(--bg3)}
+  #canvas-wrap{flex:1}
+  canvas{width:100%;display:block;border-radius:8px;background:#f8f8f8}
 
   /* コントロール */
   #controls{display:flex;gap:8px;align-items:stretch;flex-wrap:wrap}
@@ -50,10 +48,6 @@
   input[type=range]{flex:1;accent-color:var(--teal)}
 
   #status{font-size:11px;color:var(--text3);text-align:center;padding:2px 0}
-
-  /* 凡例 */
-  #legend{display:flex;gap:12px;justify-content:center;font-size:11px;color:var(--text3)}
-  .legend-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:4px}
 </style>
 </head>
 <body>
@@ -76,35 +70,21 @@
     </div>
   </div>
 
-  <div id="meters">
-    <div class="metric">
-      <div class="lbl">SPL</div>
-      <div><span class="val" id="spl-val">--</span><span class="unit">dB</span></div>
-    </div>
-    <div class="metric">
-      <div class="lbl">ピーク</div>
-      <div><span class="val" id="peak-val">--</span><span class="unit">dB</span></div>
-    </div>
-    <div class="metric">
-      <div class="lbl">ピーク周波数</div>
-      <div><span class="val" id="freq-val">--</span><span class="unit">Hz</span></div>
-    </div>
-  </div>
-
+  <!-- SPL縦メーター ＋ スペクトラム 横並び -->
   <div class="card">
-    <div class="label">音圧レベル（0 〜 100 dB）</div>
-    <div id="spl-track">
-      <div id="spl-fill"></div>
-      <div id="spl-peak-marker"></div>
+    <div id="spl-section">
+      <div id="spl-meter-wrap">
+        <div id="spl-meter-label">SPL</div>
+        <div id="spl-track-v">
+          <div id="spl-fill-v"></div>
+        </div>
+        <div id="spl-val-wrap"><span id="spl-val">--</span></div>
+        <div id="spl-val-unit">dB</div>
+      </div>
+      <div id="canvas-wrap">
+        <canvas id="fft-canvas"></canvas>
+      </div>
     </div>
-  </div>
-
-  <div class="card">
-    <div class="label" style="display:flex;justify-content:space-between">
-      <span>周波数スペクトラム（1/3 オクターブバンド）</span>
-      <span id="sr-label" style="font-size:10px;color:var(--text3)"></span>
-    </div>
-    <canvas id="fft-canvas" height="200"></canvas>
   </div>
 
   <div class="card">
@@ -117,17 +97,14 @@
     </div>
   </div>
 
-  <div id="legend">
-    <span><span class="legend-dot" style="background:var(--green)"></span>正常</span>
-    <span><span class="legend-dot" style="background:var(--amber)"></span>やや大</span>
-    <span><span class="legend-dot" style="background:var(--red)"></span>大</span>
-  </div>
-
   <div id="status">マイク開始ボタンを押してください</div>
 </div>
 
 <script>
-const BANDS=[50,63,80,100,125,160,200,250,315,400,500,630,800,1000,1250,1600,2000,2500,3150,4000,5000,6300,8000,10000];
+const BANDS=[40,63,100,160,250,400,630,1000,1600,2500,4000,6300,10000,16000];
+const BAND_LABELS=['40','63','100','160','250','400','630','1k','1.6k','2.5k','4k','6.3k','10k','16k'];
+const DB_DISPLAY_MIN=0,DB_DISPLAY_MAX=120;
+const DB_INTERNAL_MIN=-100,DB_INTERNAL_MAX=20;
 
 let audioCtx=null,analyser=null,stream=null,gainNode=null;
 let running=false,raf=null;
@@ -138,14 +115,27 @@ const canvas=document.getElementById('fft-canvas');
 const ctx2d=canvas.getContext('2d');
 
 function resizeCanvas(){
-  const w=canvas.parentElement.clientWidth-24;
+  const wrap=document.getElementById('canvas-wrap');
+  const w=wrap.clientWidth;
+  // canvasの高さをSPLメーターに合わせて縦長に
+  const splWrap=document.getElementById('spl-track-v');
+  const h=splWrap.clientHeight||300;
   canvas.width=Math.floor(w*devicePixelRatio);
-  canvas.height=Math.floor(200*devicePixelRatio);
+  canvas.height=Math.floor(h*devicePixelRatio);
   canvas.style.width=w+'px';
-  canvas.style.height='200px';
+  canvas.style.height=h+'px';
 }
-resizeCanvas();
-window.addEventListener('resize',()=>{resizeCanvas();});
+
+// SPLメーターの高さをウィンドウに応じて設定
+function setSplHeight(){
+  const vh=window.innerHeight;
+  const targetH=Math.max(200,Math.floor(vh*0.5));
+  document.getElementById('spl-track-v').style.minHeight=targetH+'px';
+  resizeCanvas();
+}
+
+setSplHeight();
+window.addEventListener('resize',()=>{setSplHeight();drawEmpty();});
 
 function updateGain(v){
   gainDB=parseInt(v);
@@ -171,8 +161,7 @@ async function toggleMic(){
     running=true;
     document.getElementById('start-btn').textContent='停止';
     document.getElementById('start-btn').classList.add('active');
-    document.getElementById('sr-label').textContent=audioCtx.sampleRate/1000+'kHz';
-    document.getElementById('status').textContent='測定中';
+    document.getElementById('status').textContent='測定中 '+audioCtx.sampleRate/1000+'kHz';
     loop();
   }catch(e){
     document.getElementById('status').textContent='マイクアクセス失敗: '+e.message;
@@ -190,14 +179,16 @@ function stopMic(){
   document.getElementById('start-btn').classList.remove('active');
   document.getElementById('status').textContent='停止しました';
   document.getElementById('spl-val').textContent='--';
-  document.getElementById('peak-val').textContent='--';
-  document.getElementById('freq-val').textContent='--';
-  document.getElementById('spl-fill').style.width='0%';
+  document.getElementById('spl-fill-v').style.height='0%';
   drawEmpty();
 }
 
 function changeFFT(v){
   if(analyser)analyser.fftSize=parseInt(v);
+}
+
+function toDisplayDb(internalDb){
+  return Math.max(0,Math.min(120,(internalDb-DB_INTERNAL_MIN)/(DB_INTERNAL_MAX-DB_INTERNAL_MIN)*120));
 }
 
 function loop(){
@@ -209,70 +200,87 @@ function loop(){
   const sr=audioCtx.sampleRate;
   const binHz=sr/analyser.fftSize;
 
-  let sumSq=0,cnt=0,maxDb=-Infinity,maxBin=0;
+  let sumSq=0,cnt=0;
   for(let i=0;i<bufLen;i++){
     const d=data[i];
-    if(isFinite(d)&&d>-Infinity){
-      const lin=Math.pow(10,d/20);
-      sumSq+=lin*lin;cnt++;
-      if(d>maxDb){maxDb=d;maxBin=i;}
-    }
+    if(isFinite(d)){const lin=Math.pow(10,d/20);sumSq+=lin*lin;cnt++;}
   }
   const rmsDb=cnt>0?20*Math.log10(Math.sqrt(sumSq/cnt)):-100;
-  const displayDb=Math.max(0,Math.min(100,rmsDb+100));
-  const pct=(displayDb/100)*100;
+  const displayDb=toDisplayDb(rmsDb);
+  const pct=displayDb/120*100;
 
   document.getElementById('spl-val').textContent=displayDb.toFixed(1);
-  const fill=document.getElementById('spl-fill');
-  fill.style.width=pct.toFixed(1)+'%';
+  const fill=document.getElementById('spl-fill-v');
+  fill.style.height=pct.toFixed(1)+'%';
   fill.style.background=pct>85?'var(--red)':pct>65?'var(--amber)':'var(--green)';
 
+  // ピークホールド（縦メーター用）
   const now=Date.now();
   if(document.getElementById('peak-hold').checked){
     if(rmsDb>peakDB){peakDB=rmsDb;peakTime=now;}
     else if(now-peakTime>2000)peakDB=rmsDb;
   }else{peakDB=rmsDb;}
-  const peakDisplay=Math.max(0,Math.min(100,peakDB+100));
-  const peakPct=(peakDisplay/100)*100;
-  document.getElementById('spl-peak-marker').style.left=peakPct.toFixed(1)+'%';
-  document.getElementById('peak-val').textContent=peakDisplay.toFixed(1);
-
-  const peakHz=Math.round(maxBin*binHz);
-  document.getElementById('freq-val').textContent=peakHz>=10000?(peakHz/1000).toFixed(1)+'k':peakHz;
 
   drawSpectrum(data,bufLen,binHz);
 }
 
-function drawEmpty(){
-  const W=canvas.width,H=canvas.height;
-  ctx2d.clearRect(0,0,W,H);
-  ctx2d.fillStyle='#242424';
-  ctx2d.fillRect(0,0,W,H);
+function dbToY(db,plotH,plotTop){
+  const disp=toDisplayDb(db);
+  return plotTop+plotH*(1-disp/DB_DISPLAY_MAX);
 }
 
-function drawSpectrum(data,bufLen,binHz){
+function drawEmpty(){
+  resizeCanvas();
   const W=canvas.width,H=canvas.height;
-  const dpr=devicePixelRatio;
   ctx2d.clearRect(0,0,W,H);
-  ctx2d.fillStyle='#242424';
+  drawGrid(W,H,null,0,0);
+}
+
+function drawGrid(W,H,data,bufLen,binHz){
+  const dpr=devicePixelRatio;
+  const leftMargin=Math.floor(34*dpr);
+  const bottomMargin=Math.floor(16*dpr);
+  const plotW=W-leftMargin;
+  const plotH=H-bottomMargin;
+  const plotTop=0;
+
+  ctx2d.fillStyle='#f8f8f8';
   ctx2d.fillRect(0,0,W,H);
 
-  const dbMin=-100,dbMax=0;
-
-  ctx2d.strokeStyle='rgba(255,255,255,0.06)';
-  ctx2d.lineWidth=1;
-  for(let db=-90;db<=0;db+=10){
-    const y=H-(db-dbMin)/(dbMax-dbMin)*H;
-    ctx2d.beginPath();ctx2d.moveTo(0,y);ctx2d.lineTo(W,y);ctx2d.stroke();
-    const label=(db+100)+'dB';
-    ctx2d.fillStyle='rgba(255,255,255,0.25)';
-    ctx2d.font=`${9*dpr}px -apple-system,sans-serif`;
-    ctx2d.fillText(label,4*dpr,y-3*dpr);
+  // 2dBごと細グリッド
+  ctx2d.strokeStyle='rgba(0,0,0,0.07)';
+  ctx2d.lineWidth=0.5;
+  for(let db=0;db<=120;db+=2){
+    const y=plotTop+plotH*(1-db/120);
+    ctx2d.beginPath();ctx2d.moveTo(leftMargin,y);ctx2d.lineTo(W,y);ctx2d.stroke();
   }
 
+  // 10dBごと太グリッド＋ラベル
+  ctx2d.strokeStyle='rgba(0,0,0,0.18)';
+  ctx2d.lineWidth=1;
+  ctx2d.fillStyle='rgba(0,0,0,0.55)';
+  ctx2d.font=`bold ${9*dpr}px -apple-system,sans-serif`;
+  ctx2d.textAlign='right';
+  for(let db=0;db<=120;db+=10){
+    const y=plotTop+plotH*(1-db/120);
+    ctx2d.beginPath();ctx2d.moveTo(leftMargin,y);ctx2d.lineTo(W,y);ctx2d.stroke();
+    ctx2d.fillText(String(db),leftMargin-3*dpr,y+3*dpr);
+  }
+  ctx2d.textAlign='left';
+
+  ctx2d.fillStyle='rgba(0,0,0,0.4)';
+  ctx2d.font=`${8*dpr}px -apple-system,sans-serif`;
+  ctx2d.fillText('dB',2*dpr,10*dpr);
+
+  if(!data||bufLen===0){
+    ctx2d.fillText('freq',leftMargin,H-2*dpr);
+    return;
+  }
+
+  // バー描画
   const bandCount=BANDS.length;
-  const barW=Math.max(2,Math.floor(W/bandCount)-2);
-  const step=W/bandCount;
+  const barW=Math.max(2,Math.floor(plotW/bandCount)-2);
+  const step=plotW/bandCount;
 
   for(let b=0;b<bandCount;b++){
     const fMid=BANDS[b];
@@ -282,26 +290,32 @@ function drawSpectrum(data,bufLen,binHz){
     const binHigh=Math.min(bufLen-1,Math.ceil(fHigh/binHz));
     let maxVal=-Infinity;
     for(let i=binLow;i<=binHigh;i++){if(data[i]>maxVal)maxVal=data[i];}
-    if(!isFinite(maxVal))maxVal=dbMin;
-    const db=Math.max(dbMin,Math.min(dbMax,maxVal));
-    const barH=(db-dbMin)/(dbMax-dbMin)*H;
-    const x=Math.floor(b*step);
-    const norm=(db-dbMin)/(dbMax-dbMin);
+    if(!isFinite(maxVal))maxVal=DB_INTERNAL_MIN;
+    const db=Math.max(DB_INTERNAL_MIN,Math.min(DB_INTERNAL_MAX,maxVal));
+    const y=dbToY(db,plotH,plotTop);
+    const barBottom=plotTop+plotH;
+    const x=leftMargin+Math.floor(b*step);
 
-    let r,g,bl;
-    if(norm>0.85){r=226;g=74;bl=74;}
-    else if(norm>0.6){r=239;g=159;bl=39;}
-    else{r=29;g=158;bl=117;}
-    ctx2d.fillStyle=`rgb(${r},${g},${bl})`;
-    ctx2d.fillRect(x+1,H-barH,barW,barH);
+    ctx2d.fillStyle='rgba(60,100,220,0.85)';
+    ctx2d.fillRect(x+1,y,barW,barBottom-y);
 
-    const label=fMid>=1000?(fMid/1000).toFixed(fMid>=10000?0:1)+'k':String(fMid);
-    ctx2d.fillStyle='rgba(255,255,255,0.3)';
-    ctx2d.font=`${7.5*dpr}px -apple-system,sans-serif`;
+    const label=BAND_LABELS[b];
+    ctx2d.fillStyle='rgba(0,0,0,0.35)';
+    ctx2d.font=`${7*dpr}px -apple-system,sans-serif`;
     ctx2d.textAlign='center';
-    ctx2d.fillText(label,x+barW/2,H-3*dpr);
+    ctx2d.fillText(label,x+barW/2,H-2*dpr);
     ctx2d.textAlign='left';
   }
+
+  ctx2d.fillStyle='rgba(0,0,0,0.4)';
+  ctx2d.font=`${8*dpr}px -apple-system,sans-serif`;
+  ctx2d.fillText('freq',leftMargin,H-2*dpr);
+}
+
+function drawSpectrum(data,bufLen,binHz){
+  const W=canvas.width,H=canvas.height;
+  ctx2d.clearRect(0,0,W,H);
+  drawGrid(W,H,data,bufLen,binHz);
 }
 
 drawEmpty();
