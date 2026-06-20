@@ -97,8 +97,17 @@
 </div>
 
 <script>
-const BANDS=[40,63,100,160,250,400,630,1000,1600,2500,4000,6300,10000,16000];
-const BAND_LABELS=['40','63','100','160','250','400','630','1k','1.6k','2.5k','4k','6.3k','10k','16k'];
+// 表示用42本バー（40Hz〜16kHz対数等間隔）
+const BAR_COUNT=42;
+const F_MIN=40,F_MAX=16000;
+const BARS=[];
+for(let i=0;i<BAR_COUNT;i++){
+  BARS.push(F_MIN*Math.pow(F_MAX/F_MIN,i/(BAR_COUNT-1)));
+}
+
+// ラベル表示する14バンドの中心周波数とラベル
+const LABEL_FREQS=[40,63,100,160,250,400,630,1000,1600,2500,4000,6300,10000,16000];
+const LABEL_NAMES=['40','63','100','160','250','400','630','1k','1.6k','2.5k','4k','6.3k','10k','16k'];
 const DB_DISPLAY_MIN=0,DB_DISPLAY_MAX=120;
 const DB_INTERNAL_MIN=-100,DB_INTERNAL_MAX=20;
 
@@ -264,18 +273,29 @@ function drawGrid(W,H,data,bufLen,binHz){
     return;
   }
 
-  // 各バンドの集計境界を対数中間点で計算
+  // 各バーの集計境界を対数中間点で計算
   const boundaries=[];
-  boundaries.push(BANDS[0]/Math.sqrt(BANDS[1]/BANDS[0])); // 左端
-  for(let b=0;b<BANDS.length-1;b++){
-    boundaries.push(Math.sqrt(BANDS[b]*BANDS[b+1])); // 対数中間点
+  boundaries.push(BARS[0]*Math.pow(BARS[0]/BARS[1],0.5));
+  for(let b=0;b<BARS.length-1;b++){
+    boundaries.push(Math.sqrt(BARS[b]*BARS[b+1]));
   }
-  boundaries.push(BANDS[BANDS.length-1]*Math.sqrt(BANDS[BANDS.length-1]/BANDS[BANDS.length-2])); // 右端
+  boundaries.push(BARS[BARS.length-1]*Math.pow(BARS[BARS.length-1]/BARS[BARS.length-2],0.5));
 
   // バー描画
-  const bandCount=BANDS.length;
-  const barW=Math.max(2,Math.floor(plotW/bandCount)-2);
+  const bandCount=BARS.length;
+  const gap=1;
+  const barW=Math.max(1,Math.floor(plotW/bandCount)-gap);
   const step=plotW/bandCount;
+
+  // ラベルを貼るバーのインデックスを事前計算（各LABEL_FREQSに最近傍のバー）
+  const labelBarIdx=LABEL_FREQS.map(f=>{
+    let best=0,bestDist=Infinity;
+    for(let i=0;i<BARS.length;i++){
+      const d=Math.abs(Math.log(BARS[i])-Math.log(f));
+      if(d<bestDist){bestDist=d;best=i;}
+    }
+    return best;
+  });
 
   for(let b=0;b<bandCount;b++){
     const fLow=boundaries[b];
@@ -293,12 +313,15 @@ function drawGrid(W,H,data,bufLen,binHz){
     ctx2d.fillStyle='rgba(60,100,220,0.85)';
     ctx2d.fillRect(x+1,y,barW,barBottom-y);
 
-    const label=BAND_LABELS[b];
-    ctx2d.fillStyle='rgba(0,0,0,0.35)';
-    ctx2d.font=`${7*dpr}px -apple-system,sans-serif`;
-    ctx2d.textAlign='center';
-    ctx2d.fillText(label,x+barW/2,H-2*dpr);
-    ctx2d.textAlign='left';
+    // ラベル表示
+    const labelIdx=labelBarIdx.indexOf(b);
+    if(labelIdx>=0){
+      ctx2d.fillStyle='rgba(0,0,0,0.4)';
+      ctx2d.font=`${6.5*dpr}px -apple-system,sans-serif`;
+      ctx2d.textAlign='center';
+      ctx2d.fillText(LABEL_NAMES[labelIdx],x+barW/2,H-2*dpr);
+      ctx2d.textAlign='left';
+    }
   }
 
   ctx2d.fillStyle='rgba(0,0,0,0.4)';
