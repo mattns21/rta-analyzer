@@ -264,15 +264,22 @@ function drawGrid(W,H,data,bufLen,binHz){
     return;
   }
 
+  // 各バンドの集計境界を対数中間点で計算
+  const boundaries=[];
+  boundaries.push(BANDS[0]/Math.sqrt(BANDS[1]/BANDS[0])); // 左端
+  for(let b=0;b<BANDS.length-1;b++){
+    boundaries.push(Math.sqrt(BANDS[b]*BANDS[b+1])); // 対数中間点
+  }
+  boundaries.push(BANDS[BANDS.length-1]*Math.sqrt(BANDS[BANDS.length-1]/BANDS[BANDS.length-2])); // 右端
+
   // バー描画
   const bandCount=BANDS.length;
   const barW=Math.max(2,Math.floor(plotW/bandCount)-2);
   const step=plotW/bandCount;
 
   for(let b=0;b<bandCount;b++){
-    const fMid=BANDS[b];
-    const fLow=fMid/Math.sqrt(2);
-    const fHigh=fMid*Math.sqrt(2);
+    const fLow=boundaries[b];
+    const fHigh=boundaries[b+1];
     const binLow=Math.max(0,Math.floor(fLow/binHz));
     const binHigh=Math.min(bufLen-1,Math.ceil(fHigh/binHz));
     let maxVal=-Infinity;
